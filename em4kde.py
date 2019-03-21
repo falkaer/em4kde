@@ -1,64 +1,74 @@
 import numpy as np
-from scipy.io import loadmat
 from scipy.stats import multivariate_normal
 
+def exclude_mask(N, i):
+    mask = np.ones(N, dtype=bool)
+    mask[i] = False
+    
+    return mask
+
 class KDE:
-    def __init__(self, dims):
+    def __init__(self, strategy, dims):
+        self.strategy = strategy
         self.sigma = np.eye(dims)
     
     def e_step(self, X_train, X_test, sigma):
-    
-        N_train, D = X_train.shape
-        N_test, _ = X_test.shape
-        pi = 1 / N_train
-
-        gamma = np.empty((N_train, N_test))
-        div = [pi * multivariate_normal.pdf(X_test, mean=X_train[j], cov=sigma) for j in range(N_train)]
         
-        for n in range(N_train):
-            gamma[n] = pi * multivariate_normal.pdf(X_test, mean=X_train[n], cov=sigma) / sum(div)
+        N_train, D = X_train.shape
+        N_test, D = X_test.shape
+        gamma = np.empty((N_train, N_test))
+        
+        for i in range(N_train):
+            gamma[i] = multivariate_normal.pdf(X_test, mean=X_train[i], cov=sigma)
+        
+        gamma /= gamma.sum(axis=0)
         
         return gamma
-        
+    
     def m_step(self, X_train, X_test, gamma):
-        
+    
         N_train, D = X_train.shape
+        N_test, D = X_test.shape
         sigma = np.zeros((D, D))
         
-        for n in range(N_train):
-            prod = X_test - X_train[n]
-
-            sigma += 1 / gamma[n].sum() * (gamma[n].reshape(1, -1).T * prod).T @ prod
+        for i in range(N_train):
+            
+            prod = X_test - X_train[i]
+            sigma += 1 / gamma[i].sum() * (gamma[i, np.newaxis].T * prod).T @ prod
         
         return np.divide(sigma, N_train)
     
-    def step(self, X_train, X_test):
+    def step(self, X):
         
-        gamma = self.e_step(X_train, X_test, self.sigma)
-        self.sigma = self.m_step(X_train, X_test, gamma)
-    
-    def density(self, X_train, Y):
-    
-        N_train, D = X_train.shape
-        return np.array([multivariate_normal.pdf(Y, mean=X_train[n], cov=self.sigma) for n in range(N_train)]).sum(axis=0) / N_train
+        N, D = X.shape
+        splits = self.strategy.get_splits()
+        sigma = np.zeros((D, D))
         
-    def log_likelihood(self, X_train, X_test):
-    
-        N_train, D = X_train.shape
-        N_test, _ = X_test.shape
-        pi = 1 / N_train
+        for X_train, X_test in splits:
+            
+            gamma = self.e_step(X_train, X_test, self.sigma)
+            sigma += self.m_step(X_train, X_test, gamma)
         
-        return -np.log([pi * multivariate_normal.pdf(X_test, mean=X_train[n], cov=self.sigma) for n in range(N_train)]).sum()
+        self.sigma = np.divide(sigma, len(splits))
+        
+    def density(self, X, Y):
+        
+        N, D = X.shape
+        return np.array([multivariate_normal.pdf(Y, mean=X[n], cov=self.sigma) for n in range(N)]).sum(axis=0) / N
+    
+    def log_likelihood(self, X):
+        
+        N, D = X.shape
+        return -np.array([multivariate_normal.logpdf(X[exclude_mask(N, i)], mean=X[i], cov=self.sigma) for i in
+                          range(N)]).sum() / N
 
-def plot_kde(kde, X_train, X_test):
-    
+def plot_kde(kde, X):
     import matplotlib.pyplot as plt
-
-    X = np.vstack((X_train, X_test))
+    
     x, y = X[:, 0], X[:, 1]
     
     xi, yi = np.mgrid[x.min():x.max():x.size ** 0.5 * 1j, y.min():y.max():y.size ** 0.5 * 1j]
-    zi = kde.density(X_train, np.vstack([xi.flatten(), yi.flatten()]).T)
+    zi = kde.density(X, np.vstack([xi.flatten(), yi.flatten()]).T)
     
     fig = plt.figure(figsize=(7, 8))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
@@ -71,26 +81,12 @@ def plot_kde(kde, X_train, X_test):
     plt.show()
 
 def train(kde, X):
-    
-    max_iter = 100
-    
-    N, D = X.shape
-    X_train = X[0:N // 2, :]
-    X_test = X[N // 2:, :]
+    max_iter = 10
     
     for iteration in range(max_iter):
         
-        kde.step(X_train, X_test)
-        print(iteration, kde.log_likelihood(X_train, X_test))
+        kde.step(X)
+        print(iteration, kde.log_likelihood(X))
         
-        if iteration % 10 == 0:
-            plot_kde(kde, X_train, X_test)
-        
-    
-X = loadmat('clusterdata2d.mat')['data']
-np.random.shuffle(X)
-
-N, D = X.shape
-kde = KDE(D)
-
-train(kde, X)
+        # if iteration % 3 == 0:
+        #     plot_kde(kde, X)

@@ -18,11 +18,25 @@ class KFold(Strategy):
         self.k = k
         N, D = X.shape
         
+        idx = np.arange(N)
+        
         if k != N:
-            np.random.permutation(X)
-
+            idx = np.random.permutation(idx)
+        
         s = N // k
-        self.splits = [(X[exclude_mask(N, range(i * s, (i + 1) * s))], X[i * s:(i + 1) * s]) for i in range(k)]
-    
+        folds = np.full(k, s, dtype=np.int)
+        folds[:N % k] += 1 # distribute surplus observations across first few folds
+        
+        self.splits = []
+        current = 0
+        
+        for fold_size in folds:
+            start, stop = current, current + fold_size
+            
+            test_idx = idx[start:stop]
+            self.splits.append((X[exclude_mask(N, test_idx)], X[test_idx]))
+            
+            current = stop
+        
     def get_splits(self):
         return self.splits

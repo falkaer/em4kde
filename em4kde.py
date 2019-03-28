@@ -37,8 +37,7 @@ class KDE:
             prod = X_test - X_train[i]
             sigma += 1 / gamma[i].sum() * (gamma[i, np.newaxis].T * prod).T @ prod
         
-        return np.divide(sigma, N_train)
-
+        return sigma / N_train
 
     def step(self, X):
         
@@ -51,7 +50,7 @@ class KDE:
             gamma = self.e_step(X_train, X_test, self.sigma)
             sigma += self.m_step(X_train, X_test, gamma)
         
-        self.sigma = np.divide(sigma, len(splits))
+        self.sigma = sigma / len(splits)
         
     def density(self, X, Y):
         
@@ -82,10 +81,9 @@ def plot_kde(kde, X):
     
     plt.show()
 
-def train(kde, X):
-    max_iter = 10
+def train(kde, X, iterations):
     
-    for iteration in range(max_iter):
+    for iteration in range(iterations):
         
         kde.step(X)
         print(iteration, kde.log_likelihood(X))

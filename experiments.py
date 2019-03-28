@@ -6,6 +6,6 @@ from em4kde import KDE, train
 X = loadmat('clusterdata2d.mat')['data']
 
 N, D = X.shape
-kde = KDE(KFold(X, 4), D)
+kde = KDE(KFold(X, 10), D)
 
 train(kde, X)

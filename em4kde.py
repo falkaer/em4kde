@@ -11,7 +11,8 @@ class KDE:
     def __init__(self, strategy, dims):
         self.strategy = strategy
         self.sigma = np.eye(dims)
-    
+
+    #@profile
     def e_step(self, X_train, X_test, sigma):
         
         N_train, D = X_train.shape
@@ -24,7 +25,7 @@ class KDE:
         gamma /= gamma.sum(axis=0)
         
         return gamma
-    
+
     def m_step(self, X_train, X_test, gamma):
     
         N_train, D = X_train.shape
@@ -37,7 +38,8 @@ class KDE:
             sigma += 1 / gamma[i].sum() * (gamma[i, np.newaxis].T * prod).T @ prod
         
         return np.divide(sigma, N_train)
-    
+
+
     def step(self, X):
         
         N, D = X.shape
@@ -88,5 +90,5 @@ def train(kde, X):
         kde.step(X)
         print(iteration, kde.log_likelihood(X))
         
-        # if iteration % 3 == 0:
-        #     plot_kde(kde, X)
+        if iteration % 3 == 0:
+            plot_kde(kde, X)

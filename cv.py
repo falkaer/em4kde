@@ -12,6 +12,21 @@ def exclude_mask(N, r):
     
     return mask
 
+class Holdout(Strategy):
+    def __init__(self, X, p):
+        import math
+        
+        X = np.random.permutation(X)
+        
+        N, D = X.shape
+        split = math.floor(N * p)
+        
+        self.train = X[:split]
+        self.test = X[split:]
+        
+    def get_splits(self):
+        return [(self.train, self.test)]
+
 class KFold(Strategy):
     def __init__(self, X, k):
         

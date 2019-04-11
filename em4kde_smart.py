@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats import multivariate_normal
 
 def exclude_mask(N, i):
     mask = np.ones(N, dtype=bool)
@@ -15,7 +14,36 @@ class KDE:
         self.strategy = strategy
         self.dims = dims
         
-        self.sigma = np.eye(dims)
+        # self.sigma = np.eye(dims)
+        self.sigma = self.init_sigma_random_cov()
+        # TODO: constrain sigma to be diagonal for regularization
+    
+    # is bad
+    def init_sigma_random_gamma(self):
+        
+        splits = self.strategy.get_splits()
+        sigma = np.zeros((self.dims, self.dims))
+        
+        for X_train, X_test in splits:
+            A = np.random.rand(len(X_train), len(X_test))
+            gamma = softmax(A)
+            print(gamma.shape)
+            
+            sigma += self.m_step(X_train, X_test, gamma)
+        
+        return sigma / len(splits)
+    
+    # is good
+    def init_sigma_random_cov(self):
+        
+        A = np.random.rand(self.dims, self.dims)
+        sign, logdet = np.linalg.slogdet(A)
+        
+        # must be definite
+        if abs(logdet) < 0.00001:
+            return self.init_sigma_random_cov()
+        
+        return A @ A.T
     
     # @profile
     def e_step(self, Q_train, Q_test, A):
@@ -43,14 +71,13 @@ class KDE:
         
         return sigma / N_train
     
-    def step(self, X):
+    def step(self):
         
         A = np.linalg.cholesky(self.sigma)
         Ainv = np.linalg.inv(A)
         
-        N, D = X.shape
         splits = self.strategy.get_splits()
-        sigma = np.zeros((D, D))
+        sigma = np.zeros((self.dims, self.dims))
         
         for X_train, X_test in splits:
             Q_train = X_train @ Ainv.T
@@ -70,7 +97,7 @@ class KDE:
         
         Q_X = X @ Ainv.T
         Q_Y = Y @ Ainv.T
-
+        
         return np.array([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)]).sum(axis=0) / N
     
     def log_likelihood(self, X):
@@ -78,9 +105,11 @@ class KDE:
         N, D = X.shape
         A = np.linalg.cholesky(self.sigma)
         Ainv = np.linalg.inv(A)
-
-        return -np.array([np.log(eps + cholesky_multivariate_normal(X[exclude_mask(N, i)] @ Ainv.T, X[i] @ Ainv.T, A)) for i in range(N)]).sum() / N
         
+        return -np.array(
+                    [np.log(eps + cholesky_multivariate_normal(X[exclude_mask(N, i)] @ Ainv.T, X[i] @ Ainv.T, A)) for i
+                     in range(N)]).sum() / N
+
 def cholesky_multivariate_normal(Q_test, q_train, A):
     detA = A.diagonal().prod()
     M = A.shape[0]
@@ -90,6 +119,10 @@ def cholesky_multivariate_normal(Q_test, q_train, A):
     
     return coeff * np.exp(exp)
 
+def softmax(x):
+    e_x = np.exp(x - np.max(x, axis=0))
+    return e_x / np.sum(e_x, axis=0)
+
 def plot_kde(kde, X):
     import matplotlib.pyplot as plt
     
@@ -98,21 +131,41 @@ def plot_kde(kde, X):
     xi, yi = np.mgrid[x.min():x.max():x.size ** 0.5 * 1j, y.min():y.max():y.size ** 0.5 * 1j]
     zi = kde.density(X, np.vstack([xi.flatten(), yi.flatten()]).T)
     
-    fig = plt.figure(figsize=(7, 8))
+    plt.figure(figsize=(7, 8))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
     
-    plt.plot(X[:, 0], X[:, 1], '.')
+    for X_train, X_test in kde.strategy.get_splits():
+        plt.plot(X_train[:, 0], X_train[:, 1], '.', color='blue')
+        plt.plot(X_test[:, 0], X_test[:, 1], '.', color='red')
     
     plt.gca().set_xlim(x.min(), x.max())
     plt.gca().set_ylim(y.min(), y.max())
     
     plt.show()
 
+def plot_training_progress(prog):
+    import matplotlib.pyplot as plt
+    
+    plt.figure(figsize=(16, 9))
+    
+    plt.plot(prog)
+    
+    plt.title("Log likelihood")
+    plt.xlabel("Iterations")
+    plt.ylabel("Log likelihood")
+    
+    plt.show()
+
 def train(kde, X, iterations):
+    likelihoods = []
+    
     for iteration in range(iterations):
         
-        kde.step(X)
-        print(iteration, kde.log_likelihood(X))
+        kde.step()
+        likelihoods.append(kde.log_likelihood(X))
+        print(iteration, likelihoods[-1])
         
         if iteration % 3 == 0:
             plot_kde(kde, X)
+    
+    plot_training_progress(likelihoods)

@@ -71,10 +71,8 @@ def plot_kde(kde, X):
     xi, yi = np.mgrid[x.min():x.max():x.size ** 0.5 * 1j, y.min():y.max():y.size ** 0.5 * 1j]
     zi = kde.density(X, np.vstack([xi.flatten(), yi.flatten()]).T)
     
-    fig = plt.figure(figsize=(7, 8))
+    plt.figure(figsize=(7, 8))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
-    
-    plt.plot(X[:, 0], X[:, 1], '.')
     
     plt.gca().set_xlim(x.min(), x.max())
     plt.gca().set_ylim(y.min(), y.max())

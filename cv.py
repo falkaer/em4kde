@@ -5,6 +5,10 @@ class Strategy(ABC):
     @abstractmethod
     def get_splits(self):
         pass
+    
+    @abstractmethod
+    def train_len(self):
+        pass
 
 def exclude_mask(N, r):
     mask = np.ones(N, dtype=bool)
@@ -21,37 +25,46 @@ class Holdout(Strategy):
         N, D = X.shape
         split = math.floor(N * p)
         
-        self.train = X[:split]
-        self.test = X[split:]
+        idx = np.arange(N)
+        
+        self.train = idx[:split]
+        self.test = idx[split:]
         
     def get_splits(self):
         return [(self.train, self.test)]
+    
+    def train_len(self):
+        return len(self.train)
 
 class KFold(Strategy):
-    def __init__(self, X, k):
-        
+    def __init__(self, N, k):
+    
+        self.N = N
         self.k = k
-        N, D = X.shape
-        
-        idx = np.arange(N)
-        
-        if k != N:
-            idx = np.random.permutation(idx)
-        
-        s = N // k
-        folds = np.full(k, s, dtype=np.int)
-        folds[:N % k] += 1 # distribute surplus observations across first few folds
-        
-        self.splits = []
-        current = 0
-        
-        for fold_size in folds:
-            start, stop = current, current + fold_size
-            
-            test_idx = idx[start:stop]
-            self.splits.append((X[exclude_mask(N, test_idx)], X[test_idx]))
-            
-            current = stop
         
     def get_splits(self):
-        return self.splits
+    
+        idx = np.arange(self.N)
+    
+        if self.k != self.N:
+            idx = np.random.permutation(idx)
+    
+        s = self.N // self.k
+        folds = np.full(self.k, s, dtype=np.int)
+        folds[:self.N % self.k] += 1  # distribute surplus observations across first few folds
+    
+        splits = []
+        current = 0
+    
+        for fold_size in folds:
+            start, stop = current, current + fold_size
+        
+            test_idx = idx[start:stop]
+            splits.append((idx[exclude_mask(self.N, test_idx)], test_idx))
+        
+            current = stop
+        
+        return splits
+    
+    def train_len(self):
+        return self.N - self.N // self.k

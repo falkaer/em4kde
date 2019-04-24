@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 def exclude_mask(N, i):
     mask = np.ones(N, dtype=bool)
@@ -10,33 +11,18 @@ eps = 1e-10
 
 class KDE:
     
-    def __init__(self, strategy, dims):
+    def __init__(self, X, strategy):
         self.strategy = strategy
-        self.dims = dims
+        self.X = X
         
         # self.sigma = np.eye(dims)
         self.sigma = self.init_sigma_random_cov()
         # TODO: constrain sigma to be diagonal for regularization
     
-    # is bad
-    def init_sigma_random_gamma(self):
-        
-        splits = self.strategy.get_splits()
-        sigma = np.zeros((self.dims, self.dims))
-        
-        for X_train, X_test in splits:
-            A = np.random.rand(len(X_train), len(X_test))
-            gamma = softmax(A)
-            print(gamma.shape)
-            
-            sigma += self.m_step(X_train, X_test, gamma)
-        
-        return sigma / len(splits)
-    
-    # is good
     def init_sigma_random_cov(self):
-        
-        A = np.random.rand(self.dims, self.dims)
+    
+        N, D = self.X.shape
+        A = np.random.rand(D, D)
         sign, logdet = np.linalg.slogdet(A)
         
         # must be definite
@@ -59,34 +45,42 @@ class KDE:
         
         return gamma
     
-    def m_step(self, X_train, X_test, gamma):
+    def m_step(self, gamma, train_len):
         
-        N_train, D = X_train.shape
-        N_test, D = X_test.shape
+        N, D = self.X.shape
         sigma = np.zeros((D, D))
+        mask = ~np.isnan(gamma)
         
-        for i in range(N_train):
-            prod = X_test - X_train[i]
-            sigma += 1 / gamma[i].sum() * (gamma[i, np.newaxis].T * prod).T @ prod
+        for i in range(N):
+            
+            prod = self.X[mask[i]] - self.X[i]
+            gammai = gamma[i, mask[i]]
+            sigma += 1 / gammai.sum() * (gammai[np.newaxis].T * prod).T @ prod #/ len(gammai)
         
-        return sigma / N_train
+        #TODO: pls
+        # sigma = 1 / gamma.sum() * (gamma[np.newaxis].T * prod).T @ prod
+        
+        return sigma / N
     
     def step(self):
-        
+    
+        N, D = self.X.shape
         A = np.linalg.cholesky(self.sigma)
         Ainv = np.linalg.inv(A)
         
         splits = self.strategy.get_splits()
-        sigma = np.zeros((self.dims, self.dims))
+        lens = self.strategy.train_len()
         
-        for X_train, X_test in splits:
-            Q_train = X_train @ Ainv.T
-            Q_test = X_test @ Ainv.T
+        gamma = np.full((N, N), np.nan)
+        
+        for train_idx, test_idx in splits:
             
-            gamma = self.e_step(Q_train, Q_test, self.sigma)
-            sigma += self.m_step(X_train, X_test, gamma)
-        
-        self.sigma = sigma / len(splits)
+            Q_train = self.X[train_idx] @ Ainv.T
+            Q_test = self.X[test_idx] @ Ainv.T
+            
+            gamma[train_idx[:, np.newaxis], test_idx] = self.e_step(Q_train, Q_test, A)
+            
+        self.sigma = self.m_step(gamma, lens)
     
     def density(self, X, Y):
         
@@ -98,7 +92,7 @@ class KDE:
         Q_X = X @ Ainv.T
         Q_Y = Y @ Ainv.T
         
-        return np.array([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)]).sum(axis=0) / N
+        return np.array([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)]).sum(axis=0)
     
     def log_likelihood(self, X):
         
@@ -134,7 +128,10 @@ def plot_kde(kde, X):
     plt.figure(figsize=(7, 8))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
     
-    for X_train, X_test in kde.strategy.get_splits():
+    for train_idx, test_idx in kde.strategy.get_splits():
+        X_train = X[train_idx]
+        X_test = X[test_idx]
+        
         plt.plot(X_train[:, 0], X_train[:, 1], '.', color='blue')
         plt.plot(X_test[:, 0], X_test[:, 1], '.', color='red')
     
@@ -169,3 +166,21 @@ def train(kde, X, iterations):
             plot_kde(kde, X)
     
     plot_training_progress(likelihoods)
+
+def m_step(X, gamma):
+    
+    N, D = X.shape
+    sigma = np.zeros((D, D))
+    
+    for i in range(N):
+        prod = X - X[i]
+        awf = (gamma[i, np.newaxis].T * prod).T @ prod
+        print(awf)
+        sigma += 1 / gamma[i].sum() * awf
+    
+    return sigma / N
+
+def sig(X, x, gammai):
+    prod = X - x
+    awf = (gammai[np.newaxis].T * prod).T @ prod
+    return 1 / gammai.sum() * awf

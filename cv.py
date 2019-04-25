@@ -1,14 +1,12 @@
 from abc import abstractmethod, ABC
 import numpy as np
+import math
 
 class Strategy(ABC):
     @abstractmethod
     def get_splits(self):
         pass
-    
-    @abstractmethod
-    def train_len(self):
-        pass
+
 
 def exclude_mask(N, r):
     mask = np.ones(N, dtype=bool)
@@ -18,21 +16,20 @@ def exclude_mask(N, r):
 
 class Holdout(Strategy):
     def __init__(self, N, p):
-        import math
 
-        split = math.floor(N * p)
-        
-        idx = np.arange(N)
-        idx = np.random.permutation(idx)
-        
-        self.train_idx = idx[:split]
-        self.test_idx = idx[split:]
+        self.N = N
+        self.p = p
         
     def get_splits(self):
-        return [(self.train_idx, self.test_idx)]
-    
-    def train_len(self):
-        return len(self.train_idx)
+        split = math.floor(self.N * self.p)
+
+        idx = np.arange(self.N)
+        idx = np.random.permutation(idx)
+
+        train_idx = idx[:split]
+        test_idx = idx[split:]
+        return [(train_idx, test_idx)]
+
 
 class KFold(Strategy):
     def __init__(self, N, k):
@@ -58,11 +55,8 @@ class KFold(Strategy):
             start, stop = current, current + fold_size
         
             test_idx = idx[start:stop]
-            splits.append((idx[exclude_mask(self.N, test_idx)], test_idx))
+            splits.append((idx[exclude_mask(self.N, range(start,stop))], test_idx))
         
             current = stop
         
         return splits
-    
-    def train_len(self):
-        return self.N - self.N // self.k

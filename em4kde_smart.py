@@ -40,12 +40,15 @@ class KDE:
         
         for i in range(N_train):
             gamma[i] = cholesky_multivariate_normal(Q_test, Q_train[i], A)
-        
-        gamma /= gamma.sum(axis=0)
-        
+
+        gammasum = gamma.sum(axis=0)
+        gammasum[gammasum == 0] = 1
+
+
+        gamma /= gammasum
         return gamma
     
-    def m_step(self, gamma, train_len):
+    def m_step(self, gamma):
         
         N, D = self.X.shape
         sigma = np.zeros((D, D))
@@ -55,7 +58,13 @@ class KDE:
             
             prod = self.X[mask[i]] - self.X[i]
             gammai = gamma[i, mask[i]]
-            sigma += 1 / gammai.sum() * (gammai[np.newaxis].T * prod).T @ prod #/ len(gammai)
+            gammaSum = gammai.sum()
+            if gammaSum != 0:
+                sigma += (gammai[np.newaxis].T * prod).T @ prod /  gammaSum
+
+
+            if np.isnan(sigma).any():
+                print('error')
         
         #TODO: pls
         # sigma = 1 / gamma.sum() * (gamma[np.newaxis].T * prod).T @ prod
@@ -69,7 +78,6 @@ class KDE:
         Ainv = np.linalg.inv(A)
         
         splits = self.strategy.get_splits()
-        lens = self.strategy.train_len()
         
         gamma = np.full((N, N), np.nan)
         
@@ -80,7 +88,7 @@ class KDE:
             
             gamma[train_idx[:, np.newaxis], test_idx] = self.e_step(Q_train, Q_test, A)
             
-        self.sigma = self.m_step(gamma, lens)
+        self.sigma = self.m_step(gamma)
     
     def density(self, X, Y):
         

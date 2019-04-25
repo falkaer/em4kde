@@ -174,21 +174,3 @@ def train(kde, X, iterations):
             plot_kde(kde, X)
     
     plot_training_progress(likelihoods)
-
-def m_step(X, gamma):
-    
-    N, D = X.shape
-    sigma = np.zeros((D, D))
-    
-    for i in range(N):
-        prod = X - X[i]
-        awf = (gamma[i, np.newaxis].T * prod).T @ prod
-        print(awf)
-        sigma += 1 / gamma[i].sum() * awf
-    
-    return sigma / N
-
-def sig(X, x, gammai):
-    prod = X - x
-    awf = (gammai[np.newaxis].T * prod).T @ prod
-    return 1 / gammai.sum() * awf

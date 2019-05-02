@@ -2,15 +2,14 @@ import numpy as np
 import torch
 
 def exclude_mask(N, i):
-    mask = np.ones(N, dtype=bool)
-    mask[i] = False
+    mask = torch.ones(N, dtype=torch.uint8)
+    mask[i] = 0
     
     return mask
 
 eps = 1e-10
 
 class KDE:
-    
     def __init__(self, X, strategy):
         self.strategy = strategy
         self.X = X
@@ -20,28 +19,28 @@ class KDE:
         # TODO: constrain sigma to be diagonal for regularization
     
     def init_sigma_random_cov(self):
-    
+        
         N, D = self.X.shape
-        A = np.random.rand(D, D)
-        sign, logdet = np.linalg.slogdet(A)
+        A = torch.rand(D, D, device=self.X.device)
+        sign, logdet = torch.slogdet(A)
         
         # must be definite
-        if abs(logdet) < 0.00001:
+        if logdet.abs() < 0.00001:
             return self.init_sigma_random_cov()
         
-        return A @ A.T
+        return A @ A.t()
     
     # @profile
     def e_step(self, Q_train, Q_test, A):
         
         N_train, D = Q_train.shape
         N_test, D = Q_test.shape
-        gamma = np.empty((N_train, N_test))
+        gamma = torch.empty(N_train, N_test, device=self.X.device)
         
         for i in range(N_train):
             gamma[i] = cholesky_multivariate_normal(Q_test, Q_train[i], A)
-
-        gammasum = gamma.sum(axis=0)
+        
+        gammasum = gamma.sum(dim=0)
         gammasum[gammasum == 0] = 1
         
         gamma /= gammasum
@@ -50,65 +49,57 @@ class KDE:
     def m_step(self, gamma):
         
         N, D = self.X.shape
-        sigma = np.zeros((D, D))
-        mask = ~np.isnan(gamma)
+        sigma = torch.zeros(D, D, device=self.X.device)
+        mask = ~torch.isnan(gamma)
         
         for i in range(N):
             
-            prod = self.X[mask[i]] - self.X[i]
+            diff = self.X[mask[i]] - self.X[i]
             gammai = gamma[i, mask[i]]
-            gammaSum = gammai.sum()
-            if gammaSum != 0:
-                sigma += (gammai[np.newaxis].T * prod).T @ prod /  gammaSum
-
-
-            if np.isnan(sigma).any():
-                print('error')
-        
-        #TODO: pls
-        # sigma = 1 / gamma.sum() * (gamma[np.newaxis].T * prod).T @ prod
+            gamma_sum = gammai.sum()
+            
+            if gamma_sum != 0:
+                sigma += (gammai[None].t() * diff).t() @ diff / gamma_sum
         
         return sigma / N
     
     def step(self):
-    
+        
         N, D = self.X.shape
-        A = np.linalg.cholesky(self.sigma)
-        Ainv = np.linalg.inv(A)
+        A = torch.cholesky(self.sigma)
+        Ainv = torch.inverse(A)
         
         splits = self.strategy.get_splits()
-        
-        gamma = np.full((N, N), np.nan)
+        gamma = torch.full((N, N), np.nan, device=self.X.device)
         
         for train_idx, test_idx in splits:
+            Q_train = self.X[train_idx] @ Ainv.t()
+            Q_test = self.X[test_idx] @ Ainv.t()
             
-            Q_train = self.X[train_idx] @ Ainv.T
-            Q_test = self.X[test_idx] @ Ainv.T
-            
-            gamma[train_idx[:, np.newaxis], test_idx] = self.e_step(Q_train, Q_test, A)
-            
+            gamma[train_idx[:, None], test_idx] = self.e_step(Q_train, Q_test, A)
+        
         self.sigma = self.m_step(gamma)
     
     def density(self, X, Y):
         
         N, D = X.shape
         
-        A = np.linalg.cholesky(self.sigma)
-        Ainv = np.linalg.inv(A)
+        A = torch.cholesky(self.sigma)
+        Ainv = torch.inverse(A)
         
-        Q_X = X @ Ainv.T
-        Q_Y = Y @ Ainv.T
+        Q_X = X @ Ainv.t()
+        Q_Y = Y @ Ainv.t()
         
-        return np.array([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)]).sum(axis=0) / N
+        return torch.stack([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)]).sum(dim=0) / N
     
     def log_likelihood(self, X):
         
         N, D = X.shape
-        A = np.linalg.cholesky(self.sigma)
-        Ainv = np.linalg.inv(A)
+        A = torch.cholesky(self.sigma)
+        Ainv = torch.inverse(A)
         
-        return -np.array(
-                    [np.log(eps + cholesky_multivariate_normal(X[exclude_mask(N, i)] @ Ainv.T, X[i] @ Ainv.T, A)) for i
+        return -torch.stack(
+                    [torch.log(eps + cholesky_multivariate_normal(X[exclude_mask(N, i)] @ Ainv.t(), X[i] @ Ainv.t(), A)) for i
                      in range(N)]).sum() / N
 
 def cholesky_multivariate_normal(Q_test, q_train, A):
@@ -116,28 +107,29 @@ def cholesky_multivariate_normal(Q_test, q_train, A):
     M = A.shape[0]
     
     coeff = 1 / (2 * np.pi ** (M / 2) * detA)
-    exp = -1 / 2 * (np.sum(Q_test ** 2, axis=1) + q_train.T @ q_train - 2 * Q_test @ q_train)
+    # exp = -1 / 2 * (torch.sum(Q_test ** 2, dim=1) + q_train @ q_train - 2 * Q_test @ q_train)
+    exp = -1 / 2 * (torch.sum(Q_test ** 2, dim=1) + q_train @ q_train - 2 * Q_test @ q_train)
     
-    return coeff * np.exp(exp)
-
-def softmax(x):
-    e_x = np.exp(x - np.max(x, axis=0))
-    return e_x / np.sum(e_x, axis=0)
+    return coeff * torch.exp(exp)
 
 def plot_kde(kde, X):
     import matplotlib.pyplot as plt
     
-    x, y = X[:, 0], X[:, 1]
+    Xn = X.cpu().numpy()
+    x, y = Xn[:, 0], Xn[:, 1]
     
-    xi, yi = np.mgrid[x.min():x.max():x.size ** 0.5 * 1j, y.min():y.max():y.size ** 0.5 * 1j]
-    zi = kde.density(X, np.vstack([xi.flatten(), yi.flatten()]).T)
+    xi, yi = np.mgrid[x.min():x.max():x.size ** 0.5 * 1j, 
+                      y.min():y.max():y.size ** 0.5 * 1j]
+    
+    Y = torch.from_numpy(np.vstack([xi.flatten(), yi.flatten()]).T).float().to(X.device)
+    zi = kde.density(X, Y)
     
     plt.figure(figsize=(7, 8))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
     
     for train_idx, test_idx in kde.strategy.get_splits():
-        X_train = X[train_idx]
-        X_test = X[test_idx]
+        X_train = Xn[train_idx]
+        X_test = Xn[test_idx]
         
         plt.plot(X_train[:, 0], X_train[:, 1], '.', color='blue')
         plt.plot(X_test[:, 0], X_test[:, 1], '.', color='red')
@@ -167,9 +159,9 @@ def train(kde, X, iterations):
         
         kde.step()
         likelihoods.append(kde.log_likelihood(X))
-        print(iteration, likelihoods[-1])
         
         if iteration % 3 == 0:
-            plot_kde(kde, X)
+            # plot_kde(kde, X)
+            print(iteration, likelihoods[-1].item())
     
-    plot_training_progress(likelihoods)
+    # plot_training_progress(likelihoods)

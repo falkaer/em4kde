@@ -2,17 +2,16 @@ from abc import abstractmethod, ABC
 import numpy as np
 import math
 
-class Strategy(ABC):
-    @abstractmethod
-    def get_splits(self):
-        pass
-
-
 def exclude_mask(N, r):
     mask = np.ones(N, dtype=bool)
     mask[r] = False
     
     return mask
+
+class Strategy(ABC):
+    @abstractmethod
+    def get_splits(self):
+        pass
 
 class Holdout(Strategy):
     def __init__(self, N, p):
@@ -29,7 +28,6 @@ class Holdout(Strategy):
         train_idx = idx[:split]
         test_idx = idx[split:]
         return [(train_idx, test_idx)]
-
 
 class KFold(Strategy):
     def __init__(self, N, k):

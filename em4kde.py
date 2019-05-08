@@ -15,6 +15,7 @@ class KDE:
         self.X = X
         
         self.sigma = self.init_sigma_sample_cov()
+        # self.sigma = self.init_sigma_random_cov()
     
     def init_sigma_sample_cov(self):
         return np.cov(self.X, rowvar=False)
@@ -22,45 +23,48 @@ class KDE:
     def init_sigma_random_cov(self):
         
         N, D = self.X.shape
-        A = np.random.rand(D, D)
-        sign, logdet = np.linalg.slogdet(A)
+        A = np.random.randn(D, D)
+        AA = A @ A.T
+        
+        sign, logdet = np.linalg.slogdet(AA)
         
         # must be definite
         if abs(logdet) < 0.00001:
             return self.init_sigma_random_cov()
         
-        return A @ A.T
+        return AA
     
     # @profile
     def e_step(self, Q_train, Q_test, A):
         
         N_train, D = Q_train.shape
         N_test, D = Q_test.shape
-        gamma = np.empty((N_train, N_test))
+        log_gamma = np.empty((N_train, N_test))
         
         for i in range(N_train):
-            gamma[i] = cholesky_multivariate_normal(Q_test, Q_train[i], A)
+            log_gamma[i] = log_cholesky_multivariate_normal(Q_test, Q_train[i], A)
         
-        gammasum = gamma.sum(axis=0)
-        gammasum[gammasum == 0] = 1  # avoid div by zero
+        log_gamma_sum = logsumexp(log_gamma, axis=0)
+        log_gamma -= log_gamma_sum
         
-        gamma /= gammasum
-        return gamma
+        return log_gamma
     
-    def m_step(self, gamma):
+    def m_step(self, log_gamma):
         
         N, D = self.X.shape
         sigma = np.zeros((D, D))
-        mask = ~np.isnan(gamma)
+        mask = ~np.isnan(log_gamma)
         
         for i in range(N):
-            
             diff = self.X[mask[i]] - self.X[i]
-            gammai = gamma[i, mask[i]]
-            gammaSum = gammai.sum()
+            log_gammai = log_gamma[i, mask[i]]
+            log_gammai_sum = logsumexp(log_gammai)
             
-            if gammaSum != 0:
-                sigma += (gammai[np.newaxis].T * diff).T @ diff / gammaSum
+            weighted_diff = np.exp(log_gammai)[None].T * diff
+            div = np.exp(log_gammai_sum)
+            
+            if div != 0:
+                sigma += weighted_diff.T @ diff / div
         
         return sigma / N
     
@@ -71,15 +75,15 @@ class KDE:
         Ainv = np.linalg.inv(A)
         
         splits = self.strategy.get_splits()
-        gamma = np.full((N, N), np.nan)
+        log_gamma = np.full((N, N), np.nan)
         
         for train_idx, test_idx in splits:
             Q_train = self.X[train_idx] @ Ainv.T
             Q_test = self.X[test_idx] @ Ainv.T
             
-            gamma[train_idx[:, np.newaxis], test_idx] = self.e_step(Q_train, Q_test, A)
+            log_gamma[train_idx[:, None], test_idx] = self.e_step(Q_train, Q_test, A)
         
-        self.sigma = self.m_step(gamma)
+        self.sigma = self.m_step(log_gamma)
     
     def density(self, Y):
         
@@ -91,7 +95,7 @@ class KDE:
         Q_X = self.X @ Ainv.T
         Q_Y = Y @ Ainv.T
         
-        return np.sum([cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)], axis=0) / N
+        return np.exp(logsumexp([log_cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)], axis=0)) / N
     
     def log_likelihood(self, X):
         
@@ -101,7 +105,7 @@ class KDE:
         N, _ = X.shape
         Q = X @ Ainv.T
         
-        return np.sum(np.log((cholesky_multivariate_normal(Q[i], Q, A) / N).sum()) for i in range(N))
+        return np.sum(logsumexp(log_cholesky_multivariate_normal(Q[i], Q, A)) - np.log(N) for i in range(N))
     
     def save_kde(self, fname):
         np.savez(fname, sigma=self.sigma, X=self.X)
@@ -113,14 +117,21 @@ def load_kde(fname):
     
     return kde
 
-def cholesky_multivariate_normal(Q_test, Q_train, A):
-    detA = A.diagonal().prod()
+def log_cholesky_multivariate_normal(Q_test, Q_train, A):
+    log_detA = np.log(A.diagonal()).sum()
     M = A.shape[0]
     
-    coeff = 1 / (2 * np.pi ** (M / 2) * detA)
+    log_coeff = - M / 2 * np.log(2 * np.pi) - log_detA
     exp = -1 / 2 * (pairwise_dot(Q_test, Q_test) + pairwise_dot(Q_train, Q_train) - 2 * pairwise_dot(Q_test, Q_train))
     
-    return coeff * np.exp(exp)
+    return log_coeff + exp
+
+def logsumexp(x, axis=None):
+    
+    x_max = np.max(x, axis=axis)
+    
+    with np.errstate(under='ignore'):
+        return np.log(np.sum(np.exp(x - x_max), axis=axis)) + x_max
 
 def pairwise_dot(X, Y):
     # pairwise dot product over row vectors of matrices, 

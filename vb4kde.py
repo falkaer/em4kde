@@ -2,7 +2,12 @@ import torch
 import numpy as np
 
 def cov(X):
-    pass
+    N, _ = X.shape
+    
+    x_bar = X.mean(dim=0)
+    diff = X - x_bar
+    
+    return diff.t() @ diff / (N - 1)
 
 class KDE:
     
@@ -20,7 +25,7 @@ class KDE:
         X = self.X.cpu().numpy()
         nu = 0.1
         
-        return torch.from_numpy(np.cov(X, rowvar=False)) * nu, nu  # TODO: maybe inverse here
+        return cov(X) * nu, nu  # TODO: maybe inverse here
     
     def e_step(self, X_train, X_test):
         N_train, D = X_train.shape

@@ -43,6 +43,7 @@ class KDE:
         
         # self.sigma = np.eye(dims)
         self.sigma = self.init_sigma_random_cov()
+        self.sigma = self.init_sigma_sample_cov()
         # TODO: constrain sigma to be diagonal for regularization
     
     def init_sigma_random_cov(self):
@@ -73,9 +74,6 @@ class KDE:
         for i in range(N_train):
             log_gamma[i] = log_cholesky_multivariate_normal(Q_test, Q_train[i], A)
         
-        log_gamma_sum = torch.logsumexp(log_gamma, dim=0)
-        log_gamma -= log_gamma_sum
-        
         return log_gamma
     
     def m_step(self, log_gamma):
@@ -89,12 +87,10 @@ class KDE:
             diff = self.X[mask[i]] - self.X[i]
             log_gammai = log_gamma[i, mask[i]]
             log_gammai_sum = torch.logsumexp(log_gammai, dim=0)
+            log_gammai -= log_gammai_sum
             
             weighted_diff = torch.exp(log_gammai)[None].t() * diff
-            div = torch.exp(log_gammai_sum)
-            
-            if div != 0:
-                sigma += weighted_diff.t() @ diff / div
+            sigma += weighted_diff.t() @ diff
         
         return sigma / N
     

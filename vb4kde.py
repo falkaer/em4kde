@@ -22,10 +22,8 @@ class KDE:
     
     def init_W_nu(self):
         
-        X = self.X.cpu().numpy()
         nu = 0.1
-        
-        return cov(X) * nu, nu  # TODO: maybe inverse here
+        return cov(self.X) * nu, nu  # TODO: maybe inverse here
     
     def e_step(self, X_train, X_test):
         N_train, D = X_train.shape

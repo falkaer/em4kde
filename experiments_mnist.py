@@ -9,20 +9,15 @@ from cv import KFold
 from em4kde_torch import KDE, train
 
 dataset = MNIST('mnist', train=True, download=True)
-X = dataset.data.view(dataset.data.shape[0], -1)
 mask = (dataset.targets == 0)
-X = X[mask].numpy()
 
-from sklearn.decomposition import PCA
+X_reduced = np.load('mnist_pca.npy')
+X_reduced = torch.from_numpy(X_reduced)[mask].float().cuda()
 
-X = PCA(n_components=500).fit_transform(X)
-N, D = X.shape
-X = X.astype(np.float64)
-
+N, D = X_reduced.shape
 print(N, D)
 
-X = torch.from_numpy(X).float().cuda()
-kde = KDE(X, KFold(N, 10))
+kde = KDE(X_reduced, KFold(N, 10))
 train(kde, 100)
 
 kde.save_kde('kde_0.pt')

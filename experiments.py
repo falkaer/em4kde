@@ -14,11 +14,11 @@ X = loadmat('clusterdata2d.mat')['data']
 N, D = X.shape
 X = torch.from_numpy(X).float().cuda()
 
-# kde = load_kde('kde.npz')
+kde = load_kde('kde.npz')
 
-# kde.strategy = KFold(N, 10)
-kde = KDE(X, KFold(N, 10))
-train(kde, 50)
+kde.strategy = KFold(N, 10)
+# kde = KDE(X, KFold(N, 3))
+train(kde, 20)
 
 # kde.save_kde('kde.npz')
 

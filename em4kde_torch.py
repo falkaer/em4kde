@@ -201,7 +201,9 @@ def plot_kde(kde):
     
     plt.gca().set_xlim(x.min(), x.max())
     plt.gca().set_ylim(y.min(), y.max())
-
+    
+    plt.show()
+    
 def plot_training_progress(prog):
     plt.figure(figsize=(16, 9))
     

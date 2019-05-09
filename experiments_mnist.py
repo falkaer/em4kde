@@ -22,10 +22,7 @@ X = X.astype(np.float64)
 print(N, D)
 
 X = torch.from_numpy(X).float().cuda()
-kde = KDE(X, KFold(N, 3))
-train(kde, 50)
+kde = KDE(X, KFold(N, 10))
+train(kde, 100)
 
-kde.save_kde('kde_0.npz')
-
-# kde.strategy = KFold(N, N)
-# train(kde, X, 10)
+kde.save_kde('kde_0.pt')

@@ -43,7 +43,7 @@ class KDE:
         
         # self.sigma = np.eye(dims)
         self.sigma = self.init_sigma_random_cov()
-        self.sigma = self.init_sigma_sample_cov()
+        # self.sigma = self.init_sigma_sample_cov()
         # TODO: constrain sigma to be diagonal for regularization
     
     def init_sigma_random_cov(self):
@@ -69,28 +69,32 @@ class KDE:
         
         N_train, D = Q_train.shape
         N_test, D = Q_test.shape
-        log_gamma = torch.empty(N_train, N_test, device=self.X.device)
+        log_rho = torch.empty(N_train, N_test, device=self.X.device)
         
         for i in range(N_train):
-            log_gamma[i] = log_cholesky_multivariate_normal(Q_test, Q_train[i], A)
+            log_rho[i] = log_cholesky_multivariate_normal(Q_test, Q_train[i], A) - np.log(N_train)
         
-        return log_gamma
+        return log_rho
     
-    def m_step(self, log_gamma):
+    def m_step(self, log_rho):
         
         N, D = self.X.shape
         sigma = torch.zeros(D, D, device=self.X.device)
-        mask = ~torch.isnan(log_gamma)
+        mask = ~torch.isinf(log_rho)
+        gamma = torch.empty_like(log_rho)
+        
+        log_rho_sums = torch.logsumexp(log_rho, dim=0)
+        
+        for i in range(N):
+            gamma[i] = torch.exp(log_rho[i] - log_rho_sums)
         
         for i in range(N):
             
             diff = self.X[mask[i]] - self.X[i]
-            log_gammai = log_gamma[i, mask[i]]
-            log_gammai_sum = torch.logsumexp(log_gammai, dim=0)
-            log_gammai -= log_gammai_sum
+            gammai = gamma[i, mask[i]]
             
-            weighted_diff = torch.exp(log_gammai)[None].t() * diff
-            sigma += weighted_diff.t() @ diff
+            weighted_diff = gammai[None].t() * diff
+            sigma += weighted_diff.t() @ diff #/ gammai.sum() 
         
         return sigma / N
     
@@ -101,15 +105,15 @@ class KDE:
         Ainv = torch.inverse(A)
         
         splits = self.strategy.get_splits()
-        log_gamma = torch.full((N, N), np.nan, device=self.X.device)
+        log_rho = torch.full((N, N), -np.inf, device=self.X.device)
         
         for train_idx, test_idx in splits:
             Q_train = self.X[train_idx] @ Ainv.t()
             Q_test = self.X[test_idx] @ Ainv.t()
             
-            log_gamma[train_idx[:, None], test_idx] = self.e_step(Q_train, Q_test, A)
+            log_rho[train_idx[:, None], test_idx] = self.e_step(Q_train, Q_test, A)
         
-        self.sigma = self.m_step(log_gamma)
+        self.sigma = self.m_step(log_rho)
     
     def density(self, Y):
         
@@ -121,11 +125,11 @@ class KDE:
         Q_X = self.X @ Ainv.t()
         Q_Y = Y @ Ainv.t()
         
-        return torch.exp(
-                    torch.logsumexp(
-                                torch.stack(tuple(log_cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N))),
-                                dim=0)) / N
-    
+        log_densities = torch.stack(tuple(log_cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)), dim=0)
+        log_density = torch.logsumexp(log_densities, dim=0) - np.log(N)
+        
+        return torch.exp(log_density)
+        
     def log_likelihood(self, X):
         
         N, D = X.shape
@@ -135,9 +139,9 @@ class KDE:
         Q = X @ Ainv.t()
         
         return torch.sum(torch.logsumexp(
-                    torch.stack(tuple(log_cholesky_multivariate_normal(Q[i], Q, A) - np.log(N) for i in range(N))),
-                    dim=0))
-    
+                    torch.stack(tuple(log_cholesky_multivariate_normal(Q[i], Q, A) for i in range(N))),
+                    dim=0) - np.log(N))
+        
     def save_kde(self, fname):
         
         torch.save({'sigma': self.sigma,
@@ -145,7 +149,7 @@ class KDE:
 
 def load_kde(fname):
     
-    d = torch.load(fname)
+    d = torch.load(fname, map_location='cpu')
     kde = KDE(d['X'], None)
     kde.sigma = d['sigma']
     

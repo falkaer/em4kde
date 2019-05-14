@@ -41,6 +41,7 @@ class KDE:
         log_rho = torch.empty(N_train, N_test, device=self.X.device)
         
         for i in range(N_train):
+            
             diff = X_test - X_train[i]
             
             # pairwise dot product over the rows of diff

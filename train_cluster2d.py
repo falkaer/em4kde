@@ -20,7 +20,7 @@ X = torch.from_numpy(X).float()#.cuda()
 # kde = load_kde('kde.npz')
 # kde.strategy = KFold(N, 10)
 
-kde = KDE(X, KFold(N, 3))
+kde = KDE(X, KFold(N, 10))
 train(kde, 30)
 
 # kde.save_kde('kde.npz')

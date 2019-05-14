@@ -94,7 +94,7 @@ class KDE:
             gammai = gamma[i, mask[i]]
             
             weighted_diff = gammai[None].t() * diff
-            sigma += weighted_diff.t() @ diff #/ gammai.sum() 
+            sigma += weighted_diff.t() @ diff
         
         return sigma / N
     

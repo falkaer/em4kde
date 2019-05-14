@@ -21,11 +21,11 @@ X = X.numpy().astype(np.float64)
 
 _, D = X.shape
 
-pca = PCA(n_components=D)
+pca = PCA(n_components=D, whiten=True)
 pca.fit(X)
 
-cutoff_var = np.sum(pca.explained_variance_) * 0.95
-cumsum_var = np.cumsum(pca.explained_variance_)
+cutoff_var = np.sum(pca.explained_variance_ratio_) * 0.95
+cumsum_var = np.cumsum(pca.explained_variance_ratio_)
 cutoff_idx = np.arange(D)[cumsum_var > cutoff_var][0]
 
 print(cumsum_var[cutoff_idx])
@@ -34,7 +34,7 @@ print(cutoff_idx)
 
 offset = 20
 xs = range(1, cutoff_idx + offset + 1)
-ys = pca.explained_variance_[:cutoff_idx + offset]
+ys = pca.explained_variance_ratio_[:cutoff_idx + offset]
 d = np.zeros(cutoff_idx + offset)
 
 plt.figure(figsize=(8, 6))
@@ -54,7 +54,7 @@ plt.show()
 import torch
 
 sc1 = StandardScaler()
-pca = PCA(n_components=cutoff_idx + 1)
+pca = PCA(n_components=cutoff_idx + 1, whiten=True)
 sc2 = StandardScaler()
 
 X_reduced = sc2.fit_transform(pca.fit_transform(sc1.fit_transform(X)))

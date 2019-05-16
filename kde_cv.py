@@ -50,14 +50,24 @@ class SklearnKde:
         plt.show()
 
 import numpy as np
-from scipy.io import loadmat
+#from scipy.io import loadmat
+import torch
 
+np.seterr(all='warn')
+
+from torchvision.datasets import MNIST
+
+dataset = MNIST('mnist', train=True, download=True)
+mask = torch.cat(((dataset.targets == 8), torch.zeros(10000, dtype=torch.uint8)))
+
+pca_data = torch.load('mnist_pca.pt')
+X = pca_data['X_reduced'][mask].numpy()
 # X = loadmat('clusterdata2d.mat')['data']
-y = loadmat('weather.mat')['TMPMAX']
-y = y[~np.isnan(y)]
-X = np.stack((np.arange(len(y)), y), axis=1)[:2000]
+#y = loadmat('weather.mat')['TMPMAX']
+#y = y[~np.isnan(y)]
+#X = np.stack((np.arange(len(y)), y), axis=1)[:2000]
 
 kde = SklearnKde(np.linspace(0.0000000001, 5, 100), X, 10)
 kde.train_CV()
 kde.result()
-kde.plot()
+#kde.plot()

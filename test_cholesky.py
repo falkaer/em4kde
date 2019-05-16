@@ -65,8 +65,11 @@ for M in range(1, dims):
             print("Got error", e)
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-plt.figure(figsize=(6, 5))
+sns.set_style('whitegrid')
+
+plt.figure(figsize=(6, 4))
 
 plt.plot(range(1, dims), scipy_times)
 plt.plot(range(1, dims), cholesky_times)

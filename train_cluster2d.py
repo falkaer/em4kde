@@ -5,7 +5,7 @@ from scipy.io import loadmat
 np.seterr(all='warn')
 from cv import KFold
 import em4kde_torch as kde
-import vb4kde as kde
+# import vb4kde as kde
 
 # X = loadmat('clusterdata2d.mat')['data']
 y = loadmat('weather.mat')['TMPMAX']
@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 X = StandardScaler().fit_transform(X)
 
 N, D = X.shape
-X = torch.from_numpy(X).float().cuda()
+X = torch.from_numpy(X).float()#.cuda()
 
 # kde = load_kde('kde.npz')
 # kde.strategy = KFold(N, 10)

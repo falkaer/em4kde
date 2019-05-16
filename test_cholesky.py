@@ -1,24 +1,20 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 
-def cholesky_multivariate_normal(Q_test, q_train, A):
-    detA = A.diagonal().prod()
+def cholesky_multivariate_normal(Q_test, Q_train, A):
+    if len(Q_train.shape) == 1:
+        Q_switch = Q_test
+        Q_test = Q_train
+        Q_train = Q_switch
+    
+    log_detA = np.log(A.diagonal()).sum()
     M = A.shape[0]
     
-    coeff = 1 / (2 * np.pi ** (M / 2) * detA)
-    exp = -1 / 2 * (np.sum(Q_test ** 2, axis=1) + q_train.T @ q_train - 2 * Q_test @ q_train)
+    log_coeff = -M / 2 * np.log(2 * np.pi) - log_detA
+    # exp = -1 / 2 * (pairwise_dot(Q_test, Q_test) + pairwise_dot(Q_train, Q_train) - 2 * pairwise_dot(Q_test, Q_train))
+    exp = -1 / 2 * (Q_test @ Q_test + np.einsum('ij,ij->i', Q_train, Q_train) - 2 * Q_train @ Q_test)
     
-    return coeff * np.exp(exp)
-
-# def normal(X_test, x_train, sigma):
-#     N_test, M = X_test.shape
-#     siginv = np.linalg.inv(sigma)
-#     
-#     sign, logdet = np.linalg.slogdet(2 * np.pi * sigma)
-#     coeff = 1 / ((sign * np.exp(logdet)) ** (1 / 2))
-#     exp = [-1 / 2 * (X_test[i] - x_train).T @ siginv @ (X_test[i] - x_train) for i in range(N_test)]
-#     
-#     return coeff * np.exp(exp)
+    return np.exp(log_coeff + exp)
 
 import timeit
 
@@ -29,7 +25,6 @@ def wrapper(func, *args, **kwargs):
     return wrapped
 
 scipy_times = []
-# naive_times = []
 cholesky_times = []
 
 repetitions = 10
@@ -42,7 +37,7 @@ for M in range(1, dims):
     while True:
         
         B = np.random.rand(M, M)
-        sigma = B.T @ B
+        sigma = B @ B.T
         
         A = np.linalg.cholesky(sigma)
         Ainv = np.linalg.inv(A)
@@ -57,12 +52,10 @@ for M in range(1, dims):
             
             scipy_t = 1000 * timeit.timeit(wrapper(multivariate_normal.pdf, X_test, mean=x_train, cov=sigma),
                                            number=repetitions)
-            # naive_t = 1000 * timeit.timeit(wrapper(normal, X_test, x_train, sigma), number=repetitions)
             cholesky_t = 1000 * timeit.timeit(wrapper(cholesky_multivariate_normal, Q_test, q_train, A),
                                               number=repetitions)
             
             scipy_times.append(scipy_t)
-            # naive_times.append(naive_t)
             cholesky_times.append(cholesky_t)
             
             break
@@ -73,14 +66,12 @@ for M in range(1, dims):
 
 import matplotlib.pyplot as plt
 
-plt.figure(figsize=(16, 9))
+plt.figure(figsize=(6, 5))
 
 plt.plot(range(1, dims), scipy_times)
-# plt.plot(range(1, dims), naive_times)
 plt.plot(range(1, dims), cholesky_times)
 
 plt.title("Normal distribution timings")
-# plt.legend(["SciPy implementation", "Naïve implementation", "Cholesky implementation"])
 plt.legend(["SciPy implementation", "Cholesky implementation"])
 plt.xlabel("Data dimensions")
 plt.ylabel("Time (milliseconds)")

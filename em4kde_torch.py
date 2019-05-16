@@ -194,18 +194,22 @@ def plot_kde(kde):
     Y = torch.from_numpy(np.vstack([xi.flatten(), yi.flatten()]).T).float().to(kde.X.device)
     zi = kde.density(Y).cpu().numpy()
     
-    plt.figure(figsize=(7, 8))
+    plt.figure(figsize=(10, 7))
     plt.contourf(xi, yi, zi.reshape(xi.shape))
     
-    for train_idx, test_idx in kde.strategy.get_splits():
-        X_train = Xn[train_idx]
-        X_test = Xn[test_idx]
-        
-        plt.plot(X_train[:, 0], X_train[:, 1], '.', color='blue')
-        plt.plot(X_test[:, 0], X_test[:, 1], '.', color='red')
-    
+    # for train_idx, test_idx in kde.strategy.get_splits():
+    #     X_train = Xn[train_idx]
+    #     X_test = Xn[test_idx]
+    #     
+    #     plt.plot(X_train[:, 0], X_train[:, 1], '.', color='blue')
+    #     plt.plot(X_test[:, 0], X_test[:, 1], '.', color='red')
+
+    plt.scatter(Xn[:, 0], Xn[:, 1], s=2, color='white')
+
     plt.gca().set_xlim(x.min(), x.max())
     plt.gca().set_ylim(y.min(), y.max())
+    plt.xticks([])
+    plt.yticks([])
     
     plt.show()
 

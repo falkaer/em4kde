@@ -24,7 +24,7 @@ _, D = X.shape
 pca = PCA(n_components=D, whiten=True)
 pca.fit(X)
 
-cutoff_var = np.sum(pca.explained_variance_ratio_) * 0.95
+cutoff_var = np.sum(pca.explained_variance_ratio_) * 0.85
 cumsum_var = np.cumsum(pca.explained_variance_ratio_)
 cutoff_idx = np.arange(D)[cumsum_var > cutoff_var][0]
 
@@ -47,7 +47,7 @@ sns.despine(left=True, bottom=True)
 plt.xlabel('Dimensionality of PCA reduction', fontsize=13)
 plt.ylabel('Explained variance', fontsize=13)
 plt.title('MNIST choice of PCA components', fontsize=14)
-plt.legend(['Explained variance', '95th percentile'])
+plt.legend(['Explained variance', '85th percentile'])
 
 plt.show()
 

@@ -42,8 +42,8 @@ class KDE:
         self.X = X
         
         # self.sigma = np.eye(dims)
-        self.sigma = self.init_sigma_random_cov()
-        # self.sigma = self.init_sigma_sample_cov()
+        # self.sigma = self.init_sigma_random_cov()
+        self.sigma = self.init_sigma_sample_cov()
         # TODO: constrain sigma to be diagonal for regularization
     
     def init_sigma_random_cov(self):
@@ -89,7 +89,6 @@ class KDE:
             gamma[i] = torch.exp(log_rho[i] - log_rho_sums)
         
         for i in range(N):
-            
             diff = self.X[mask[i]] - self.X[i]
             gammai = gamma[i, mask[i]]
             
@@ -115,8 +114,7 @@ class KDE:
         
         self.sigma = self.m_step(log_rho)
     
-    def density(self, Y):
-        
+    def log_density(self, Y):
         N, D = self.X.shape
         
         A = torch.cholesky(self.sigma)
@@ -128,8 +126,11 @@ class KDE:
         log_densities = torch.stack(tuple(log_cholesky_multivariate_normal(Q_Y, Q_X[i], A) for i in range(N)), dim=0)
         log_density = torch.logsumexp(log_densities, dim=0) - np.log(N)
         
-        return torch.exp(log_density)
-        
+        return log_density
+    
+    def density(self, Y):
+        return torch.exp(self.log_density(Y))
+    
     def log_likelihood(self, X):
         
         N, D = X.shape
@@ -141,14 +142,13 @@ class KDE:
         return torch.sum(torch.logsumexp(
                     torch.stack(tuple(log_cholesky_multivariate_normal(Q[i], Q, A) for i in range(N))),
                     dim=0) - np.log(N))
-        
+    
     def save_kde(self, fname):
         
         torch.save({'sigma': self.sigma,
                     'X'    : self.X}, fname)
 
 def load_kde(fname):
-    
     d = torch.load(fname, map_location='cpu')
     kde = KDE(d['X'], None)
     kde.sigma = d['sigma']
@@ -156,30 +156,35 @@ def load_kde(fname):
     return kde
 
 def log_cholesky_multivariate_normal(Q_test, Q_train, A):
+    if len(Q_train.shape) == 1:
+        Q_switch = Q_test
+        Q_test = Q_train
+        Q_train = Q_switch
+    
     log_detA = torch.log(A.diagonal()).sum()
     M = A.shape[0]
     
     log_coeff = -M / 2 * np.log(2 * np.pi) - log_detA
-    exp = -1 / 2 * (pairwise_dot(Q_test, Q_test) + pairwise_dot(Q_train, Q_train) - 2 * pairwise_dot(Q_test, Q_train))
+    # exp = -1 / 2 * (pairwise_dot(Q_test, Q_test) + pairwise_dot(Q_train, Q_train) - 2 * pairwise_dot(Q_test, Q_train))
+    exp = -1 / 2 * (Q_test @ Q_test + torch.einsum('ij,ij->i', Q_train, Q_train) - 2 * Q_train @ Q_test)
     
     return log_coeff + exp
 
-def pairwise_dot(X, Y):
-    # pairwise dot product over row vectors of matrices, 
-    # promotes vectors to matrices and broadcasts over singleton dimension
-    
-    X = atleast_2d(X)
-    Y = atleast_2d(Y)
-    
-    if X.shape[0] == 1 and Y.shape[0] != 1:
-        X = X.expand_as(Y)
-    elif X.shape[0] != 1 and Y.shape[0] == 1:
-        Y = Y.expand_as(X)
-    
-    return torch.einsum('ij,ij->i', X, Y)
+# def pairwise_dot(X, Y):
+#     # pairwise dot product over row vectors of matrices, 
+#     # promotes vectors to matrices and broadcasts over singleton dimension
+#     
+#     X = atleast_2d(X)
+#     Y = atleast_2d(Y)
+#     
+#     if X.shape[0] == 1 and Y.shape[0] != 1:
+#         X = X.expand_as(Y)
+#     elif X.shape[0] != 1 and Y.shape[0] == 1:
+#         Y = Y.expand_as(X)
+#     
+#     return torch.einsum('ij,ij->i', X, Y)
 
 def plot_kde(kde):
-    
     Xn = kde.X.cpu().numpy()
     x, y = Xn[:, 0], Xn[:, 1]
     
@@ -203,7 +208,7 @@ def plot_kde(kde):
     plt.gca().set_ylim(y.min(), y.max())
     
     plt.show()
-    
+
 def plot_training_progress(prog):
     plt.figure(figsize=(16, 9))
     
@@ -227,7 +232,7 @@ def train(kde, iterations):
         kde.step()
         likelihoods.append(kde.log_likelihood(kde.X).item())
         print(iteration, likelihoods[-1])
-
+        
         if kde.X.shape[1] == 2 and iteration % 3 == 0:
             plot_kde(kde)
     

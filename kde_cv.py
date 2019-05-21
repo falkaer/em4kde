@@ -60,7 +60,7 @@ from torchvision.datasets import MNIST
 dataset = MNIST('mnist', train=True, download=True)
 mask = torch.cat(((dataset.targets == 1), torch.zeros(10000, dtype=torch.uint8)))
 
-pca_data = torch.load('mnist_pca.pt')
+pca_data = torch.load('mnist_pca_90.pt')
 X = pca_data['X_reduced'][mask].numpy()
 # X = loadmat('clusterdata2d.mat')['data']
 #y = loadmat('weather.mat')['TMPMAX']

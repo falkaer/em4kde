@@ -24,7 +24,7 @@ _, D = X.shape
 pca = PCA(n_components=D, whiten=True)
 pca.fit(X)
 
-cutoff_var = np.sum(pca.explained_variance_ratio_) * 0.85
+cutoff_var = np.sum(pca.explained_variance_ratio_) * 0.9
 cumsum_var = np.cumsum(pca.explained_variance_ratio_)
 cutoff_idx = np.arange(D)[cumsum_var > cutoff_var][0]
 
@@ -58,11 +58,13 @@ pca = PCA(n_components=cutoff_idx + 1, whiten=True)
 sc2 = StandardScaler()
 
 X_reduced = sc2.fit_transform(pca.fit_transform(sc1.fit_transform(X)))
+# X_reduced = pca.fit_transform(X)
 
 torch.save({'X_reduced': torch.from_numpy(X_reduced),
             'sc1'      : sc1,
             'pca'      : pca,
-            'sc2'      : sc2},
-           'mnist_pca.pt')
+            'sc2'      : sc2
+            },
+           'mnist_pca_90.pt')
 
 # np.save('mnist_pca.npy', X_reduced)

@@ -17,7 +17,7 @@ class SklearnKde:
         self.grid = GridSearchCV(
                     KernelDensity(kernel='gaussian'),
                     params,
-                    cv=KFold(self.folds, shuffle=True))
+                    cv=KFold(self.folds, shuffle=True),verbose=2, n_jobs=12)
         
         self.grid.fit(self.X)
     
@@ -58,7 +58,7 @@ np.seterr(all='warn')
 from torchvision.datasets import MNIST
 
 dataset = MNIST('mnist', train=True, download=True)
-mask = torch.cat(((dataset.targets == 8), torch.zeros(10000, dtype=torch.uint8)))
+mask = torch.cat(((dataset.targets == 1), torch.zeros(10000, dtype=torch.uint8)))
 
 pca_data = torch.load('mnist_pca.pt')
 X = pca_data['X_reduced'][mask].numpy()
@@ -67,7 +67,7 @@ X = pca_data['X_reduced'][mask].numpy()
 #y = y[~np.isnan(y)]
 #X = np.stack((np.arange(len(y)), y), axis=1)[:2000]
 
-kde = SklearnKde(np.linspace(0.0000000001, 5, 100), X, 10)
+kde = SklearnKde(np.linspace(1/100, 1, 100), X, 10)
 kde.train_CV()
 kde.result()
 #kde.plot()
